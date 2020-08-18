@@ -6,6 +6,7 @@ import hashlib
 import mattermost
 from datetime import datetime
 from ltbw_bot_config import *
+import syslog
 
 
 class MattermostMapping(Base):
@@ -53,14 +54,17 @@ def mattermost_adapter(filename, start_date):
         else:
             rootpost = mm.get_post(mm_root_id)
             rusers = set([])
-            for reaction in rootpost['metadata']['reactions']:
-                rusers = rusers + reaction['user_id']
+            try:
+                for reaction in rootpost['metadata']['reactions']:
+                    rusers = rusers + reaction['user_id']
 
-            mtext = ""
-            for ruser in rusers:
-                username = mm.get_user(ruser)['username']
-                mtext += "@" + username + " "
-            mm.create_post(mattermost_channelid, mtext, root_id=mm_root_id)
+                mtext = ""
+                for ruser in rusers:
+                    username = mm.get_user(ruser)['username']
+                    mtext += "@" + username + " "
+                mm.create_post(mattermost_channelid, mtext, root_id=mm_root_id)
+            except:
+                pass
 
         mmmap = MattermostMapping(id=entry.id, drucksache=drucksache, mm_id=post_id, mm_root_id=mm_root_id)
         session.add(mmmap)
