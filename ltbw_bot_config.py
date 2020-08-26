@@ -10,3 +10,4 @@ startdate = datetime(2020, 7, 1)
 interval_getter = 60*60
 interval_downloader = 60
 interval_mattermost = 60
+logfile = ''

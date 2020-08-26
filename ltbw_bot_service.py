@@ -13,6 +13,10 @@ import os
 import pdfplumber
 import ltbw_bot_config as cfg
 import hashlib
+import logging
+logger = logging.getLogger('ltbw_bot_service')
+logging.basicConfig(filename=cfg.logfile)
+logger.setLevel(logging.INFO)
 
 Base = declarative_base()
 class Dokument(Base):
@@ -78,7 +82,7 @@ def get_entries(limit=30, offset=0):
 
 
 def ltgetter(engine, start_date):
-    print("Looking for new documents...")
+    logger.info("Looking for new documents...")
 
     # start database session
     Session = sessionmaker(bind=engine)
@@ -93,19 +97,19 @@ def ltgetter(engine, start_date):
     ldateo = session.query(Config).filter_by(key='ldate').first()
     startdate = datetime.strptime(ldateo.value, "%Y-%m-%d")
 
-    print("Look for entries since " + startdate.strftime("%Y-%m-%d"))
+    logger.info("Look for entries since " + startdate.strftime("%Y-%m-%d"))
 
     entries = {}
     offset = 0
     ldate = datetime.now()
     c = 0
     while ldate > startdate:
-        print("Run " + str(c+1))
+        logger.info("Run " + str(c+1))
         entries = {**entries, **get_entries(30,offset)}
         ldate = min([x['datum'] for x in entries.values()])
-        print("Oldest entry is from " + ldate.strftime("%Y-%m-%d"))
+        logger.info("Oldest entry is from " + ldate.strftime("%Y-%m-%d"))
         if (c > 30):
-            print("WARNING: Maximum of 30 runs exceeded! Stopping.")
+            logger.info("WARNING: Maximum of 30 runs exceeded! Stopping.")
             break
         else:
             c += 1
@@ -113,7 +117,7 @@ def ltgetter(engine, start_date):
 
     ldateo.value = (datetime.now()-timedelta(days=1)).strftime("%Y-%m-%d")
 
-    print(str(len(entries)) + " Documents found.")
+    logger.info(str(len(entries)) + " Documents found.")
 
     c = 0
     for entrykey, entry in entries.items():
@@ -122,13 +126,13 @@ def ltgetter(engine, start_date):
             session.add(dokument)
             c += 1
         session.commit()
-    print(str(c) + " new Documents added.")
-    print("Looking for documents finished.")
-    print("---")
+    logger.info(str(c) + " new Documents added.")
+    logger.info("Looking for documents finished.")
+    logger.info("---")
 
 def downloader(engine, start_date, folderpath):
 
-    print("Start downloader...")
+    logger.info("Start downloader...")
 
     Session = sessionmaker(bind=engine)
     session = Session()
@@ -136,7 +140,7 @@ def downloader(engine, start_date, folderpath):
     entries0 = session.query(Dokument)\
         .filter(~ exists().where(Dokument.id == DokumentText.id)).filter(Dokument.datum >= start_date).order_by(Dokument.datum)
 
-    print(str(entries0.count()) + " Documents to download. Limiting to 5.")
+    logger.info(str(entries0.count()) + " Documents to download. Limiting to 5.")
     entries = entries0.limit(5)
 
     c = 0
@@ -144,7 +148,7 @@ def downloader(engine, start_date, folderpath):
         c += 1
         drucksache = entry.drucksache
         id = entry.id
-        print("Downloading " + str(id) + "(" + str(c) + ")...")
+        logger.info("Downloading " + str(id) + "(" + str(c) + ")...")
         try:
             url = "https://www.landtag-bw.de" + entry.url
             r = requests.get(url)
@@ -153,7 +157,7 @@ def downloader(engine, start_date, folderpath):
             with open(path, 'wb') as f:
                 f.write(r.content)
 
-            print("Extracting text...")
+            logger.info("Extracting text...")
             pdf = pdfplumber.open(path)
             text = ""
             c = 1
@@ -165,53 +169,53 @@ def downloader(engine, start_date, folderpath):
 
             session.commit()
         except Exception as e:
-            print("Download failed.")
-            print(e)
-    print("Downloading finished.")
-    print("---")
+            logger.warning("Download failed.")
+            logger.info(e)
+    logger.info("Downloading finished.")
+    logger.info("---")
 
 
 def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_password, mattermost_channelid, start_date):
-    print("Mattermost Adapter started.")
+    logger.info("Mattermost Adapter started.")
     Session = sessionmaker(bind=engine)
     session = Session()
 
     entries0 = session.query(Dokument)\
         .filter(~ exists().where(Dokument.id == MattermostMapping.id)).filter(Dokument.datum >= start_date).order_by(Dokument.datum)
 
-    print(str(entries0.count()) + " Documents need to be posted to Mattermost. (Limiting to 10.)")
+    logger.info(str(entries0.count()) + " Documents need to be posted to Mattermost. (Limiting to 10.)")
 
     entries = entries0.limit(10)
 
-    print("Connecting to Mattermost...")
+    logger.info("Connecting to Mattermost...")
     mm = mattermost.MMApi("https://" + mattermost_url + "/api")
     mm.login(mattermost_user, mattermost_password)
     c = 0
     for entry in entries:
         c += 1
-        print("Posting Document " + str(entry.id) + "(" + str(c) + ")...")
+        logger.info("Posting Document " + str(entry.id) + "(" + str(c) + ")...")
         drucksache = entry.drucksache
         related = session.query(MattermostMapping).filter_by(drucksache=drucksache).first()
         if (related != None):
-            print("Document is an Update")
+            logger.info("Document is an Update")
             mm_root_id = related.mm_root_id
             pref = "Update"
         else:
-            print("Document is new")
+            logger.info("Document is new")
             mm_root_id = None
             pref = "Neu"
 
         text = pref + ": " + entry.art + ' ' + drucksache + ' von ' + entry.urheber + " (" + str(entry.datum) + ")\n"
         text += "[**" + entry.titel + "**](https://www.landtag-bw.de" + entry.url + ")"
 
-        print("Creating post...")
+        logger.info("Creating post...")
         post = mm.create_post(mattermost_channelid, text, root_id = mm_root_id)
         post_id = post['id']
 
         if (mm_root_id == None):
             mm_root_id = post_id
         else:
-            print("Getting reactions...")
+            logger.info("Getting reactions...")
             rootpost = mm.get_post(mm_root_id)
             rusers = set([])
             try:
@@ -222,17 +226,17 @@ def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_passw
                 for ruser in rusers:
                     username = mm.get_user(ruser)['username']
                     mtext += "@" + username + " "
-                print("Post mentions")
+                logger.info("Post mentions")
                 mm.create_post(mattermost_channelid, mtext, root_id=mm_root_id)
             except:
-                print("No reactions found.")
+                logger.info("No reactions found.")
 
         mmmap = MattermostMapping(id=entry.id, drucksache=drucksache, mm_id=post_id, mm_root_id=mm_root_id)
         session.add(mmmap)
         session.commit()
 
-    print("Mattermost Update finished.")
-    print("---")
+    logger.info("Mattermost Update finished.")
+    logger.info("---")
 
 if __name__ == '__main__':
 
@@ -259,16 +263,16 @@ if __name__ == '__main__':
                     mattermost_adapter(engine, cfg.mattermost_url, cfg.mattermost_user, cfg.mattermost_password, cfg.mattermost_channelid, cfg.startdate)
                 errorcount_connection = 0
             except requests.exceptions.ConnectionError as e:
-                print("ERROR: Could not connect to server.")
-                print(e)
+                logger.error("ERROR: Could not connect to server.")
+                logger.info(e)
                 errorcount_connection += 1
                 if (errorcount_connection > 10):
                     raise Exception("Too many connection errors. Config error?")
             except Exception as e:
-                print("ERROR: Unknown error.")
-                print(e)
+                logger.error("ERROR: Unknown error.")
+                logger.info(e)
                 raise Exception("Unknown error.")
 
             time.sleep(10)
     except Exception as e:
-        print("FATAL ERROR: " + str(e) + " Exiting.")
+        logger.critical("FATAL ERROR: " + str(e) + " Exiting.")
