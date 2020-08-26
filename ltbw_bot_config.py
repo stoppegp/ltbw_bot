@@ -1,8 +1,12 @@
 from datetime import datetime
 
+filename = "test.db"
 mattermost_url = ''
-mattermost_channelid = ''
 mattermost_user = ''
-mattermost_password = ''
-database_name = "lattenrost.db"
-start_date = datetime(2020, 8, 3)
+mattermost_password = 'quoo='
+mattermost_channelid = ''
+download_path = ""
+startdate = datetime(2020, 7, 1)
+interval_getter = 60*60
+interval_downloader = 60
+interval_mattermost = 60
