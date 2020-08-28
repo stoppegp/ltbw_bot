@@ -131,6 +131,7 @@ def ltgetter(engine, start_date):
     logger.info(str(c) + " new Documents added.")
     logger.info("Looking for documents finished.")
     logger.info("---")
+    return c
 
 def downloader(engine, start_date, folderpath):
 
@@ -145,6 +146,7 @@ def downloader(engine, start_date, folderpath):
     logger.info(str(entries0.count()) + " Documents to download. Limiting to 5.")
     entries = entries0.limit(5)
 
+    dl_left = entries0.count()
     c = 0
     for entry in entries:
         c += 1
@@ -170,11 +172,14 @@ def downloader(engine, start_date, folderpath):
             session.add(dokumenttext)
 
             session.commit()
+            dl_left -= 1
         except Exception as e:
             logger.warning("Download failed.")
             logger.info(e)
-    logger.info("Downloading finished.")
+    logger.info("Downloading finished. " + str(dl_left) + " Documents waitung.")
     logger.info("---")
+
+    return dl_left
 
 
 def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_password, mattermost_channelid, start_date):
@@ -188,6 +193,8 @@ def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_passw
     logger.info(str(entries0.count()) + " Documents need to be posted to Mattermost. (Limiting to 10.)")
 
     entries = entries0.limit(10)
+
+    mm_left = entries0.count()
 
     logger.info("Connecting to Mattermost...")
     mm = mattermost.MMApi("https://" + mattermost_url + "/api")
@@ -236,9 +243,11 @@ def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_passw
         mmmap = MattermostMapping(id=entry.id, drucksache=drucksache, mm_id=post_id, mm_root_id=mm_root_id)
         session.add(mmmap)
         session.commit()
+        mm_left -= 1
 
-    logger.info("Mattermost Update finished.")
+    logger.info("Mattermost Update finished. " + str(mm_left) + " Posts waiting.")
     logger.info("---")
+    return mm_left
 
 if __name__ == '__main__':
 
@@ -250,19 +259,27 @@ if __name__ == '__main__':
     last_execution_downloader = datetime(1970, 1, 1, 0, 0, 0)
     last_execution_mattermost = datetime(1970, 1, 1, 0, 0, 0)
 
+    acvrun_downloader = True
+    acvrun_mattermost = True
+
     errorcount_connection = 0
     try:
         while True:
             try:
                 if (datetime.now() - last_execution_getter).total_seconds() > cfg.interval_getter:
                     last_execution_getter = datetime.now()
-                    ltgetter(engine, cfg.startdate)
-                if (datetime.now() - last_execution_downloader).total_seconds() > cfg.interval_downloader:
+                    c = ltgetter(engine, cfg.startdate)
+                    if (c > 0):
+                        acvrun_mattermost = True
+                        acvrun_downloader = True
+                if (acvrun_downloader and (datetime.now() - last_execution_downloader).total_seconds() > cfg.interval_downloader):
                     last_execution_downloader = datetime.now()
-                    downloader(engine, cfg.startdate, cfg.download_path)
-                if (datetime.now() - last_execution_mattermost).total_seconds() > cfg.interval_mattermost:
+                    dl_left = downloader(engine, cfg.startdate, cfg.download_path)
+                    acvrun_downloader = dl_left > 0
+                if (acvrun_mattermost and (datetime.now() - last_execution_mattermost).total_seconds() > cfg.interval_mattermost):
                     last_execution_mattermost = datetime.now()
-                    mattermost_adapter(engine, cfg.mattermost_url, cfg.mattermost_user, cfg.mattermost_password, cfg.mattermost_channelid, cfg.startdate)
+                    mm_left = mattermost_adapter(engine, cfg.mattermost_url, cfg.mattermost_user, cfg.mattermost_password, cfg.mattermost_channelid, cfg.startdate)
+                    acvrun_mattermost = mm_left > 0
                 errorcount_connection = 0
             except requests.exceptions.ConnectionError as e:
                 logger.error("ERROR: Could not connect to server.")
