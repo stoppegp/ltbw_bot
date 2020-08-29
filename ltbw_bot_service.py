@@ -226,7 +226,7 @@ def differ(engine, folderpath):
                 with open(path, 'w') as f:
                     for line in difflib.unified_diff(prevdoctext.splitlines(True), text.splitlines(True), prevdocid, id):
                         f.write(line)
-                os.system('diff2html -s side -o stdout -i file -- ' + path + ' > ' + path2)
+                os.system(cfg.diff2html_exec + ' -s side -o stdout -i file -- ' + path + ' > ' + path2)
                 entry.diffStatus = 1
                 session.commit()
                 dl_left -= 1
