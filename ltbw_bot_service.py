@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import time
 from sqlalchemy import create_engine, exists
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import Column, String, Text
+from sqlalchemy import Column, String, Text, Integer
 import mattermost
 import requests
 from pathlib import Path
@@ -14,10 +14,14 @@ import pdfplumber
 import ltbw_bot_config as cfg
 import hashlib
 import logging
+import difflib
+
 logger = logging.getLogger('ltbw_bot_service')
 logging.basicConfig(filename=cfg.logfile,
     format='%(asctime)s %(levelname)-8s %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S')
+#logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+#    datefmt='%Y-%m-%d %H:%M:%S')
 logger.setLevel(logging.INFO)
 
 Base = declarative_base()
@@ -54,6 +58,7 @@ class DokumentText(Base):
     id = Column(String, primary_key=True)
     drucksache = Column(String)
     text = Column(Text)
+    diffStatus = Column(Integer, default = -1)
 
 def get_entries(limit=30, offset=0):
     entries = {}
@@ -164,23 +169,76 @@ def downloader(engine, start_date, folderpath):
             logger.info("Extracting text...")
             pdf = pdfplumber.open(path)
             text = ""
-            c = 1
+            c1 = 1
             for page in pdf.pages:
                 text += "-- SEITE " + str(c) + " --\n\n" + page.extract_text() + "\n\n"
-                c += 1
+                c1 += 1
             dokumenttext = DokumentText(id=entry.id, drucksache=drucksache, text=text)
             session.add(dokumenttext)
-
             session.commit()
             dl_left -= 1
         except Exception as e:
             logger.warning("Download failed.")
             logger.info(e)
+
     logger.info("Downloading finished. " + str(dl_left) + " Documents waitung.")
     logger.info("---")
 
     return dl_left
 
+def differ(engine, folderpath):
+
+    logger.info("Start differ...")
+
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    entries0 = session.query(DokumentText).filter(DokumentText.diffStatus==-1)
+
+    logger.info(str(entries0.count()) + " Documents to diff. Limiting to 5.")
+    entries = entries0.limit(5)
+
+    dl_left = entries0.count()
+    c = 0
+    for entry in entries:
+        c += 1
+        drucksache = entry.drucksache
+        id = entry.id
+
+        logger.info("Check document " + id)
+        thisdocdate = session.query(Dokument).filter(Dokument.id==id).first().datum
+        prevdocs = session.query(Dokument).filter(Dokument.drucksache==drucksache).filter(Dokument.datum<thisdocdate).order_by(Dokument.datum.desc())
+        #prevdocs = session.query(Dokument).filter(Dokument.datum < thisdocdate).order_by(Dokument.datum.desc())
+        if (prevdocs.count() == 0):
+            logger.info("Is first doc in DB. Finished.")
+            entry.diffStatus = 0
+            session.commit()
+        else:
+            logger.info("Is not first doc in DB...")
+            prevdocid = prevdocs.first().id
+            try:
+                prevdoctext = session.query(DokumentText).filter(DokumentText.id == prevdocid).first().text
+                text = entry.text
+                difftext = ""
+                path = folderpath + "/" + id + ".diff"
+                path2 = folderpath + "/" + id + ".html"
+                Path(os.path.dirname(path)).mkdir(parents=True, exist_ok=True)
+                with open(path, 'w') as f:
+                    for line in difflib.unified_diff(prevdoctext.splitlines(True), text.splitlines(True), prevdocid, id):
+                        f.write(line)
+                os.system('diff2html -s side -o stdout -i file -- ' + path + ' > ' + path2)
+                entry.diffStatus = 1
+                session.commit()
+                dl_left -= 1
+            except Exception as e:
+                logger.info("Previous doc is not yet parsed. Skipping.")
+                print(e)
+
+
+    logger.info("Diff finished. " + str(dl_left) + " Documents waitung.")
+    logger.info("---")
+
+    return dl_left
 
 def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_password, mattermost_channelid, start_date):
     logger.info("Mattermost Adapter started.")
@@ -256,10 +314,12 @@ if __name__ == '__main__':
     Base.metadata.create_all(engine)
 
     last_execution_getter = datetime(1970,1,1,0,0,0)
+    last_execution_differ = datetime(1970, 1, 1, 0, 0, 0)
     last_execution_downloader = datetime(1970, 1, 1, 0, 0, 0)
     last_execution_mattermost = datetime(1970, 1, 1, 0, 0, 0)
 
     acvrun_downloader = True
+    acvrun_differ = True
     acvrun_mattermost = True
 
     errorcount_connection = 0
@@ -275,7 +335,13 @@ if __name__ == '__main__':
                 if (acvrun_downloader and (datetime.now() - last_execution_downloader).total_seconds() > cfg.interval_downloader):
                     last_execution_downloader = datetime.now()
                     dl_left = downloader(engine, cfg.startdate, cfg.download_path)
+                    differ(engine, cfg.download_path)
                     acvrun_downloader = dl_left > 0
+                    acvrun_differ = True
+                if (acvrun_differ and (datetime.now() - last_execution_differ).total_seconds() > cfg.interval_downloader):
+                    last_execution_differ = datetime.now()
+                    diff_left = differ(engine, cfg.download_path)
+                    acvrun_differ = diff_left > 0
                 if (acvrun_mattermost and (datetime.now() - last_execution_mattermost).total_seconds() > cfg.interval_mattermost):
                     last_execution_mattermost = datetime.now()
                     mm_left = mattermost_adapter(engine, cfg.mattermost_url, cfg.mattermost_user, cfg.mattermost_password, cfg.mattermost_channelid, cfg.startdate)
