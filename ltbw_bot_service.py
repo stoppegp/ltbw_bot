@@ -113,6 +113,8 @@ def ltgetter(engine, start_date):
     while ldate > startdate:
         logger.info("Run " + str(c+1))
         entries = {**entries, **get_entries(30,offset)}
+        if (len(entries) == 0):
+            break
         ldate = min([x['datum'] for x in entries.values()])
         logger.info("Oldest entry is from " + ldate.strftime("%Y-%m-%d"))
         if (c > 30):
@@ -335,7 +337,6 @@ if __name__ == '__main__':
                 if (acvrun_downloader and (datetime.now() - last_execution_downloader).total_seconds() > cfg.interval_downloader):
                     last_execution_downloader = datetime.now()
                     dl_left = downloader(engine, cfg.startdate, cfg.download_path)
-                    differ(engine, cfg.download_path)
                     acvrun_downloader = dl_left > 0
                     acvrun_differ = True
                 if (acvrun_differ and (datetime.now() - last_execution_differ).total_seconds() > cfg.interval_downloader):
