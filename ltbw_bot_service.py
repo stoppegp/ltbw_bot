@@ -221,14 +221,15 @@ def differ(engine, folderpath):
             try:
                 prevdoctext = session.query(DokumentText).filter(DokumentText.id == prevdocid).first().text
                 text = entry.text
-                difftext = ""
                 path = folderpath + "/" + id + ".diff"
                 path2 = folderpath + "/" + id + ".html"
                 Path(os.path.dirname(path)).mkdir(parents=True, exist_ok=True)
                 with open(path, 'w') as f:
                     for line in difflib.unified_diff(prevdoctext.splitlines(True), text.splitlines(True), prevdocid, id):
                         f.write(line)
-                os.system(cfg.diff2html_exec + ' -s side -o stdout -i file -- ' + path + ' > ' + path2)
+                cmd = cfg.diff2html_exec + ' -s side -o stdout -i file -- ' + path + ' > ' + path2
+                logger.info(cmd)
+                os.system(cmd)
                 entry.diffStatus = 1
                 session.commit()
                 dl_left -= 1
