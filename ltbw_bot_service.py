@@ -17,11 +17,11 @@ import logging
 import difflib
 
 logger = logging.getLogger('ltbw_bot_service')
-#logging.basicConfig(filename=cfg.logfile,
-#    format='%(asctime)s %(levelname)-8s %(message)s',
-#    datefmt='%Y-%m-%d %H:%M:%S')
-logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+logging.basicConfig(filename=cfg.logfile,
+    format='%(asctime)s %(levelname)-8s %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S')
+#logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+#    datefmt='%Y-%m-%d %H:%M:%S')
 logger.setLevel(logging.INFO)
 
 Base = declarative_base()
