@@ -17,11 +17,11 @@ import logging
 import difflib
 
 logger = logging.getLogger('ltbw_bot_service')
-logging.basicConfig(filename=cfg.logfile,
-    format='%(asctime)s %(levelname)-8s %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S')
-#logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+#logging.basicConfig(filename=cfg.logfile,
+#    format='%(asctime)s %(levelname)-8s %(message)s',
 #    datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S')
 logger.setLevel(logging.INFO)
 
 Base = declarative_base()
@@ -209,8 +209,8 @@ def differ(engine, folderpath):
 
         logger.info("Check document " + id)
         thisdocdate = session.query(Dokument).filter(Dokument.id==id).first().datum
-        prevdocs = session.query(Dokument).filter(Dokument.drucksache==drucksache).filter(Dokument.datum<thisdocdate).order_by(Dokument.datum.desc())
-        #prevdocs = session.query(Dokument).filter(Dokument.datum < thisdocdate).order_by(Dokument.datum.desc())
+        #prevdocs = session.query(Dokument).filter(Dokument.drucksache==drucksache).filter(Dokument.datum<thisdocdate).order_by(Dokument.datum.desc())
+        prevdocs = session.query(Dokument).filter(Dokument.datum < thisdocdate).order_by(Dokument.datum.desc())
         if (prevdocs.count() == 0):
             logger.info("Is first doc in DB. Finished.")
             entry.diffStatus = 0
@@ -269,7 +269,7 @@ def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_passw
         if (related != None):
             logger.info("Document is an Update")
             mm_root_id = related.mm_root_id
-            pref = "Update"
+            pref = "Update ([Diff](" + cfg.diffurl + entry.id + ".html))"
         else:
             logger.info("Document is new")
             mm_root_id = None
@@ -298,8 +298,9 @@ def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_passw
                     mtext += "@" + username + " "
                 logger.info("Post mentions")
                 mm.create_post(mattermost_channelid, mtext, root_id=mm_root_id)
-            except:
+            except Exception as e:
                 logger.info("No reactions found.")
+                logger.info(str(e))
 
         mmmap = MattermostMapping(id=entry.id, drucksache=drucksache, mm_id=post_id, mm_root_id=mm_root_id)
         session.add(mmmap)

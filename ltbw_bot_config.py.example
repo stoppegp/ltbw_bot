@@ -12,3 +12,4 @@ interval_downloader = 60
 interval_mattermost = 60
 logfile = ''
 diff2html_exec='diff2html'
+diffurl = 'https://ltbw.piraten.stoppe-gp.de/diff'
