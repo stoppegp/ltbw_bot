@@ -173,7 +173,7 @@ def downloader(engine, start_date, folderpath):
             text = ""
             c1 = 1
             for page in pdf.pages:
-                text += "-- SEITE " + str(c) + " --\n\n" + page.extract_text() + "\n\n"
+                text += "-- SEITE " + str(c1) + " --\n\n" + page.extract_text() + "\n\n"
                 c1 += 1
             dokumenttext = DokumentText(id=entry.id, drucksache=drucksache, text=text)
             session.add(dokumenttext)
