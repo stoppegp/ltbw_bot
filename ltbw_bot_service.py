@@ -209,8 +209,8 @@ def differ(engine, folderpath):
 
         logger.info("Check document " + id)
         thisdocdate = session.query(Dokument).filter(Dokument.id==id).first().datum
-        #prevdocs = session.query(Dokument).filter(Dokument.drucksache==drucksache).filter(Dokument.datum<thisdocdate).order_by(Dokument.datum.desc())
-        prevdocs = session.query(Dokument).filter(Dokument.datum < thisdocdate).order_by(Dokument.datum.desc())
+        prevdocs = session.query(Dokument).filter(Dokument.drucksache==drucksache).filter(Dokument.datum<thisdocdate).order_by(Dokument.datum.desc())
+        #prevdocs = session.query(Dokument).filter(Dokument.datum < thisdocdate).order_by(Dokument.datum.desc())
         if (prevdocs.count() == 0):
             logger.info("Is first doc in DB. Finished.")
             entry.diffStatus = 0
