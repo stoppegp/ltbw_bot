@@ -173,8 +173,12 @@ def downloader(engine, start_date, folderpath):
             text = ""
             c1 = 1
             for page in pdf.pages:
-                text += "-- SEITE " + str(c1) + " --\n\n" + page.extract_text() + "\n\n"
-                c1 += 1
+                try:
+                    text += "-- SEITE " + str(c1) + " --\n\n" + page.extract_text() + "\n\n"
+                    c1 += 1
+                except Exception as e:
+                    logger.warning("Seite konnte nicht hinzugeführt werden.")
+                    logger.info(e)
             dokumenttext = DokumentText(id=entry.id, drucksache=drucksache, text=text)
             session.add(dokumenttext)
             session.commit()
@@ -290,7 +294,7 @@ def mattermost_adapter(engine, mattermost_url, mattermost_user, mattermost_passw
             rusers = set([])
             try:
                 for reaction in rootpost['metadata']['reactions']:
-                    rusers = rusers + reaction['user_id']
+                    rusers = rusers.add(reaction['user_id'])
 
                 mtext = ""
                 for ruser in rusers:
